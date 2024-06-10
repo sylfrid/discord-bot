@@ -1,6 +1,6 @@
 import {CommandInteraction, EmbedBuilder, SlashCommandBuilder} from "discord.js";
 import {CommandType} from "../types/CommandType";
-import {OpenAIServiceType} from "../types/OpenAPIServiceType";
+import {OpenAIServiceType} from "../types/OpenAIServiceType";
 import OpenAIService from "../services/OpenAIService";
 
 class ImageCommand implements CommandType {
@@ -15,24 +15,25 @@ class ImageCommand implements CommandType {
     let response = String(interaction.options.get("prompt")?.value);
     const embeds: EmbedBuilder[] = [];
     try {
-      const imagesResponse = await this.openai.generateImage(
+      const imagesResponse : any = await this.openai.generateImage(
         String(interaction.options.get("prompt")?.value)
       );
 
-      imagesResponse.data.forEach((img) => {
+      imagesResponse.data.forEach((img: { revised_prompt: any; url: any; }) => {
         embeds.push(
           new EmbedBuilder()
-            .setTitle(String(interaction.options.get("prompt")?.value))
+            .setTitle(String(interaction.options.get("prompt")?.value).substring(0, 256))
             .setDescription(img.revised_prompt ?? null)
             .setImage(img.url ?? null)
         );
       });
     } catch (error) {
-      response = await this.openai.requestChat(
-        String(interaction.options.get("prompt")?.value)
-      );
-      //response = "Oups, j'ai un soucis pour vous répondre :/";
-      await interaction.editReply(response);
+      console.log(error);
+      // response = await this.openai.requestChat(
+      //   String(interaction.options.get("prompt")?.value)
+      // );
+      // //response = "Oups, j'ai un soucis pour vous répondre :/";
+      // await interaction.editReply(response);
     }
 
     await interaction.editReply({

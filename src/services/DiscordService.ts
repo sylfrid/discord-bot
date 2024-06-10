@@ -1,14 +1,16 @@
-import {Client, REST, Routes} from "discord.js";
-import {ConfigType} from "../types/ConfigType";
-import {DiscordServiceType} from "../types/DiscordServiceType";
-import {CommandType} from "../types/CommandType";
-import {Snowflake} from "discord-api-types/globals";
-import OpenAIService from "./OpenAIService";
+import { Client, REST, Routes } from "discord.js";
+import { ConfigType } from "../types/ConfigType";
+import { DiscordServiceType } from "../types/DiscordServiceType";
+import { CommandType } from "../types/CommandType";
+import { Snowflake } from "discord-api-types/globals";
+import ChatService from "./ChatService";
 
 class DiscordService implements DiscordServiceType {
   client: Client;
   token: string;
   clientId: string;
+
+  channelConversations = new Map<string, ChatService>();
 
   constructor(config: ConfigType) {
     this.client = new Client({
@@ -28,7 +30,7 @@ class DiscordService implements DiscordServiceType {
     });
 
     this.client.on("interactionCreate", async (interaction) => {
-      //console.log(interaction);
+      console.log(interaction);
       if (!interaction.isCommand()) {
         return;
       }
@@ -46,40 +48,69 @@ class DiscordService implements DiscordServiceType {
     });
 
     this.client.on("messageCreate", async (message) => {
-      if (!message.content.includes(this.client.user.id) || message.author.bot) {
+      console.log(message);
+      if ((this.client.user !== null &&
+        !message.content.includes(this.client.user.id)) ||
+        message.author.bot
+      ) {
         return;
       }
-
-      message.channel.send(
-        await OpenAIService.getInstance().requestChat(this.cleanMessage(message.content))
-        //await ChatGPTService.getInstance().request(this.cleanMessage(message.content))
-      );
+      message.channel.sendTyping();
+      console.log(message.channelId);
+      const chatService = await this.getChatService(message.channelId);
+      if (chatService !== undefined) {
+        message.channel.send(
+          await chatService.requestChat(this.cleanMessage(message.content))
+        );
+      }
     });
 
     await this.client.login(this.token);
+  };
+
+  getChatService = (channelId: string) => {
+    if (!this.channelConversations.has(channelId)) {
+      if (this.client.user !== null) {
+        this.channelConversations.set(
+          channelId,
+          ChatService.getInstance(channelId, this.client.user.username)
+        );
+      }
+    }
+    const chatService = this.channelConversations.get(channelId);
+    if (chatService === undefined) {
+      console.error("ChatService unavailable");
+      return;
+    }
+    return this.channelConversations.get(channelId);
   };
 
   cleanMessage = (message: string): string => {
     if (this.client.user === null) {
       return message;
     }
-    return message.replace(`<@${this.client.user.id}>`, this.client.user.username);
+    return message.replace(
+      `<@${this.client?.user?.id}>`,
+      this.client?.user.username
+    );
   };
 
   deployCommands = async (guildId: string, commands: CommandType[]) => {
-    
-    
-    
-    const commandsData = Object.values(commands).map((command) => command.getData());
+    const commandsData = Object.values(commands).map((command) =>
+      command.getData()
+    );
     console.log(commandsData);
-    const rest = new REST({version: "10"}).setToken(this.token);
+    const rest = new REST({ version: "10" }).setToken(this.token);
 
     try {
       console.log("Started refreshing application (/) commands.");
       console.log(guildId);
 
       await rest.put(
-        Routes.applicationGuildCommands(this.clientId as Snowflake, guildId as Snowflake),
+        Routes.applicationGuildCommands(
+          this.clientId as Snowflake,
+          guildId as Snowflake
+        ),
         {
           body: commandsData,
         }
